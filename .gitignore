@@ -1,0 +1,5 @@
+/n8n-proxy
+coverage.out
+.env
+.env.*
+!.env.example
