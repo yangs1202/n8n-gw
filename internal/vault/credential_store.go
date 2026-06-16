@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path"
 	"strings"
 	"time"
@@ -33,9 +34,11 @@ type Store interface {
 }
 
 type KVStore struct {
-	client *vaultapi.Client
-	mount  string
-	prefix string
+	client   *vaultapi.Client
+	mount    string
+	prefix   string
+	roleID   string
+	secretID string
 }
 
 type AuthConfig struct {
@@ -51,35 +54,72 @@ func NewStore(ctx context.Context, addr string, auth AuthConfig, mount, prefix s
 	if err != nil {
 		return nil, fmt.Errorf("create vault client: %w", err)
 	}
-	if auth.Token != "" {
-		client.SetToken(auth.Token)
-	} else if auth.RoleID != "" && auth.SecretID != "" {
-		if err := loginAppRole(ctx, client, auth.RoleID, auth.SecretID); err != nil {
-			return nil, err
-		}
-	} else {
-		return nil, errors.New("vault auth is not configured")
-	}
-	return &KVStore{
+	store := &KVStore{
 		client: client,
 		mount:  strings.Trim(mount, "/"),
 		prefix: strings.Trim(prefix, "/"),
-	}, nil
+	}
+	if auth.Token != "" {
+		client.SetToken(auth.Token)
+	} else if auth.RoleID != "" && auth.SecretID != "" {
+		ttl, err := loginAppRole(ctx, client, auth.RoleID, auth.SecretID)
+		if err != nil {
+			return nil, err
+		}
+		store.roleID = auth.RoleID
+		store.secretID = auth.SecretID
+		store.startTokenRenewal(ctx, ttl)
+	} else {
+		return nil, errors.New("vault auth is not configured")
+	}
+	return store, nil
 }
 
-func loginAppRole(ctx context.Context, client *vaultapi.Client, roleID, secretID string) error {
+func loginAppRole(ctx context.Context, client *vaultapi.Client, roleID, secretID string) (int, error) {
 	secret, err := client.Logical().WriteWithContext(ctx, "auth/approle/login", map[string]any{
 		"role_id":   roleID,
 		"secret_id": secretID,
 	})
 	if err != nil {
-		return fmt.Errorf("vault approle login: %w", err)
+		return 0, fmt.Errorf("vault approle login: %w", err)
 	}
 	if secret == nil || secret.Auth == nil || secret.Auth.ClientToken == "" {
-		return errors.New("vault approle login did not return a token")
+		return 0, errors.New("vault approle login did not return a token")
 	}
 	client.SetToken(secret.Auth.ClientToken)
-	return nil
+	return secret.Auth.LeaseDuration, nil
+}
+
+func (s *KVStore) startTokenRenewal(ctx context.Context, ttlSeconds int) {
+	if ttlSeconds <= 0 {
+		ttlSeconds = 3600
+	}
+	interval := time.Duration(ttlSeconds*2/3) * time.Second
+	const minInterval = 5 * time.Minute
+	if interval < minInterval {
+		interval = minInterval
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := s.client.Auth().Token().RenewSelfWithContext(ctx, 0); err != nil {
+					slog.Warn("vault token renewal failed, attempting re-login", "error", err)
+					if _, err2 := loginAppRole(ctx, s.client, s.roleID, s.secretID); err2 != nil {
+						slog.Error("vault approle re-login failed", "error", err2)
+					} else {
+						slog.Info("vault approle re-login succeeded")
+					}
+				} else {
+					slog.Debug("vault token renewed")
+				}
+			}
+		}
+	}()
 }
 
 func (s *KVStore) Get(ctx context.Context, issuer, subject string) (Credential, error) {
