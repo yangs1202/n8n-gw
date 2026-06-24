@@ -179,18 +179,16 @@ func (s *Server) serveInternal(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAuthLogin(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("redirect") != "" || r.URL.Query().Get("redirect_to") != "" || r.URL.Query().Get("return_to") == "" {
-		_, sess, hadCookie, err := s.lookupSessionFromCookies(r)
-		if err == nil {
-			s.loginAndRedirectTo(w, r, sess, nativeLoginReturnTo(r))
-			return
-		}
-		if hadCookie && errors.Is(err, session.ErrNotFound) {
-			s.clearProxySessionCookies(w)
-		} else if err != nil {
-			s.writeError(w, r, http.StatusServiceUnavailable, "session_store_unavailable")
-			return
-		}
+	_, sess, hadCookie, err := s.lookupSessionFromCookies(r)
+	if hadCookie && err == nil {
+		s.loginAndRedirectTo(w, r, sess, nativeLoginReturnTo(r))
+		return
+	}
+	if hadCookie && errors.Is(err, session.ErrNotFound) {
+		s.clearProxySessionCookies(w)
+	} else if err != nil {
+		s.writeError(w, r, http.StatusServiceUnavailable, "session_store_unavailable")
+		return
 	}
 	returnTo := r.URL.Query().Get("return_to")
 	if !security.ValidReturnTo(returnTo) || isForbiddenReturnPath(returnTo) {

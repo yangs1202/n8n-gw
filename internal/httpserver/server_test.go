@@ -253,6 +253,44 @@ func TestAuthLoginWithNativeRedirectAndSessionRefreshesN8NCookie(t *testing.T) {
 	}
 }
 
+func TestAuthLoginWithReturnToAndSessionRefreshesN8NCookie(t *testing.T) {
+	store := session.NewMemoryStore(time.Hour, time.Minute)
+	sessionID := createTestSession(t, store)
+	creds := vault.NewMemoryStore()
+	if err := creds.Put(context.Background(), vault.Credential{
+		Issuer:            "issuer",
+		Subject:           "subject",
+		Email:             "user@example.com",
+		N8NEmailOrLoginID: "n8n@example.com",
+		N8NPassword:       "pw",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var loginCalled bool
+	server := newTestServer(t, testDeps{
+		sessions:    store,
+		credentials: creds,
+		n8n: n8n.FakeClient{LoginFunc: func(ctx context.Context, emailOrLoginID, password string) (n8n.LoginResult, error) {
+			loginCalled = true
+			return n8n.LoginResult{StatusCode: 200, Body: []byte(`{"id":"u"}`), Cookies: []string{"n8n-auth=fresh"}}, nil
+		}},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/auth/login?return_to=%2Fworkflows", nil)
+	req.AddCookie(&http.Cookie{Name: security.ProxySessionCookieName, Value: sessionID})
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+	if !loginCalled {
+		t.Fatal("n8n login was not called")
+	}
+	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/workflows" {
+		t.Fatalf("unexpected response %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	cookies := strings.Join(rec.Header().Values("Set-Cookie"), "\n")
+	if !strings.Contains(cookies, "n8n-auth=fresh") {
+		t.Fatalf("n8n cookie was not refreshed: %s", cookies)
+	}
+}
+
 func TestAuthLoginWithoutReturnToAndSessionUsesReferer(t *testing.T) {
 	store := session.NewMemoryStore(time.Hour, time.Minute)
 	sessionID := createTestSession(t, store)
