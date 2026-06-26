@@ -1,8 +1,12 @@
 package vault
 
 import (
+	"errors"
+	"net/http"
 	"strings"
 	"testing"
+
+	vaultapi "github.com/hashicorp/vault/api"
 )
 
 func TestPathForHashesIssuerAndSubject(t *testing.T) {
@@ -20,5 +24,42 @@ func TestPathForHashesIssuerAndSubject(t *testing.T) {
 	}
 	if got == PathFor("n8n-gw/users", "https://other.example.com", subject) {
 		t.Fatal("different issuer should produce different path")
+	}
+}
+
+func TestIsVaultAuthError(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "forbidden response",
+			err:  &vaultapi.ResponseError{StatusCode: http.StatusForbidden},
+			want: true,
+		},
+		{
+			name: "unauthorized response",
+			err:  &vaultapi.ResponseError{StatusCode: http.StatusUnauthorized},
+			want: true,
+		},
+		{
+			name: "not found response",
+			err:  &vaultapi.ResponseError{StatusCode: http.StatusNotFound},
+			want: false,
+		},
+		{
+			name: "permission denied text",
+			err:  errors.New("permission denied"),
+			want: true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isVaultAuthError(tc.err); got != tc.want {
+				t.Fatalf("isVaultAuthError() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

@@ -765,6 +765,7 @@ func (s *Server) getCredential(ctx context.Context, issuer, subject string) (vau
 			s.metrics.vaultOps.WithLabelValues("read", "not_found").Inc()
 		} else {
 			s.metrics.vaultOps.WithLabelValues("read", "error").Inc()
+			s.logger.Error("credential store read failed", "request_id", RequestID(ctx), "error", err)
 		}
 		return vault.Credential{}, err
 	}
@@ -775,6 +776,7 @@ func (s *Server) getCredential(ctx context.Context, issuer, subject string) (vau
 func (s *Server) putCredential(ctx context.Context, cred vault.Credential) error {
 	if err := s.credentials.Put(ctx, cred); err != nil {
 		s.metrics.vaultOps.WithLabelValues("write", "error").Inc()
+		s.logger.Error("credential store write failed", "request_id", RequestID(ctx), "error", err)
 		return err
 	}
 	s.metrics.vaultOps.WithLabelValues("write", "success").Inc()
@@ -784,6 +786,7 @@ func (s *Server) putCredential(ctx context.Context, cred vault.Credential) error
 func (s *Server) deleteCredential(ctx context.Context, issuer, subject string) error {
 	if err := s.credentials.Delete(ctx, issuer, subject); err != nil {
 		s.metrics.vaultOps.WithLabelValues("delete", "error").Inc()
+		s.logger.Error("credential store delete failed", "request_id", RequestID(ctx), "error", err)
 		return err
 	}
 	s.metrics.vaultOps.WithLabelValues("delete", "success").Inc()

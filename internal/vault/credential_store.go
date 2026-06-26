@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"path"
 	"strings"
 	"time"
@@ -123,7 +124,13 @@ func (s *KVStore) startTokenRenewal(ctx context.Context, ttlSeconds int) {
 }
 
 func (s *KVStore) Get(ctx context.Context, issuer, subject string) (Credential, error) {
-	secret, err := s.client.Logical().ReadWithContext(ctx, s.dataPath(issuer, subject))
+	read := func() (*vaultapi.Secret, error) {
+		return s.client.Logical().ReadWithContext(ctx, s.dataPath(issuer, subject))
+	}
+	secret, err := read()
+	if err != nil && s.reauthenticateAfterAuthError(ctx, "read", err) {
+		secret, err = read()
+	}
 	if err != nil {
 		return Credential{}, fmt.Errorf("vault read credential: %w", err)
 	}
@@ -159,6 +166,13 @@ func (s *KVStore) Put(ctx context.Context, cred Credential) error {
 		},
 	}
 	if _, err := s.client.Logical().WriteWithContext(ctx, s.dataPath(cred.Issuer, cred.Subject), payload); err != nil {
+		if s.reauthenticateAfterAuthError(ctx, "write", err) {
+			if _, retryErr := s.client.Logical().WriteWithContext(ctx, s.dataPath(cred.Issuer, cred.Subject), payload); retryErr == nil {
+				return nil
+			} else {
+				err = retryErr
+			}
+		}
 		return fmt.Errorf("vault write credential: %w", err)
 	}
 	return nil
@@ -166,6 +180,13 @@ func (s *KVStore) Put(ctx context.Context, cred Credential) error {
 
 func (s *KVStore) Delete(ctx context.Context, issuer, subject string) error {
 	if _, err := s.client.Logical().DeleteWithContext(ctx, s.metadataPath(issuer, subject)); err != nil {
+		if s.reauthenticateAfterAuthError(ctx, "delete", err) {
+			if _, retryErr := s.client.Logical().DeleteWithContext(ctx, s.metadataPath(issuer, subject)); retryErr == nil {
+				return nil
+			} else {
+				err = retryErr
+			}
+		}
 		return fmt.Errorf("vault delete credential metadata: %w", err)
 	}
 	return nil
@@ -173,10 +194,34 @@ func (s *KVStore) Delete(ctx context.Context, issuer, subject string) error {
 
 func (s *KVStore) Ping(ctx context.Context) error {
 	_, err := s.client.Auth().Token().LookupSelfWithContext(ctx)
+	if err != nil && s.reauthenticateAfterAuthError(ctx, "lookup-self", err) {
+		_, err = s.client.Auth().Token().LookupSelfWithContext(ctx)
+	}
 	if err != nil {
 		return fmt.Errorf("vault token lookup: %w", err)
 	}
 	return nil
+}
+
+func (s *KVStore) reauthenticateAfterAuthError(ctx context.Context, operation string, err error) bool {
+	if s.roleID == "" || s.secretID == "" || !isVaultAuthError(err) {
+		return false
+	}
+	slog.Warn("vault operation auth failed, attempting re-login", "operation", operation, "error", err)
+	if _, loginErr := loginAppRole(ctx, s.client, s.roleID, s.secretID); loginErr != nil {
+		slog.Error("vault approle re-login failed after operation auth error", "operation", operation, "error", loginErr)
+		return false
+	}
+	slog.Info("vault approle re-login succeeded after operation auth error", "operation", operation)
+	return true
+}
+
+func isVaultAuthError(err error) bool {
+	var responseErr *vaultapi.ResponseError
+	if errors.As(err, &responseErr) {
+		return responseErr.StatusCode == http.StatusUnauthorized || responseErr.StatusCode == http.StatusForbidden
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "permission denied")
 }
 
 func (s *KVStore) dataPath(issuer, subject string) string {
