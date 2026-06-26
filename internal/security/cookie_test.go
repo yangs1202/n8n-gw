@@ -50,14 +50,26 @@ func TestProxySessionCookiesIncludeSecureFallback(t *testing.T) {
 		t.Fatalf("unexpected cookie names: %s, %s", cookies[0].Name, cookies[1].Name)
 	}
 	for _, cookie := range cookies {
-		if !cookie.Secure || !cookie.HttpOnly || cookie.Path != "/" {
+		if !cookie.Secure || !cookie.HttpOnly || cookie.Path != "/" || cookie.SameSite != http.SameSiteNoneMode {
 			t.Fatalf("unexpected cookie attributes: %#v", cookie)
 		}
 	}
 
 	cookies = ProxySessionCookies("session-id", false, 3600)
-	if len(cookies) != 1 || cookies[0].Name != InsecureProxySessionCookieName || cookies[0].Secure {
+	if len(cookies) != 1 || cookies[0].Name != InsecureProxySessionCookieName || cookies[0].Secure || cookies[0].SameSite != http.SameSiteLaxMode {
 		t.Fatalf("unexpected insecure cookie set: %#v", cookies)
+	}
+}
+
+func TestN8NBridgeCookieUsesNoneSameSiteWhenSecure(t *testing.T) {
+	cookie := N8NBridgeCookie(true, 3600)
+	if !cookie.Secure || cookie.SameSite != http.SameSiteNoneMode {
+		t.Fatalf("unexpected secure bridge cookie attributes: %#v", cookie)
+	}
+
+	cookie = N8NBridgeCookie(false, 3600)
+	if cookie.Secure || cookie.SameSite != http.SameSiteLaxMode {
+		t.Fatalf("unexpected insecure bridge cookie attributes: %#v", cookie)
 	}
 }
 

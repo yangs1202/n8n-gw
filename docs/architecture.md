@@ -36,6 +36,7 @@ flowchart LR
 ### Proxy OIDC session
 
 - 쿠키 이름: `__Host-n8np_session`
+- Cookie attributes: HTTPS에서는 `Secure; HttpOnly; SameSite=None; Path=/`, 로컬 HTTP에서는 fallback `n8np_session`에 `HttpOnly; SameSite=Lax; Path=/`
 - 저장소: Redis
 - 값: opaque random session id
 - Redis value:

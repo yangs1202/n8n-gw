@@ -162,10 +162,11 @@ Session id:
 Cookie:
 
 ```text
-__Host-n8np_session=<session_id>; Path=/; Secure; HttpOnly; SameSite=Lax
+__Host-n8np_session=<session_id>; Path=/; Secure; HttpOnly; SameSite=None
 ```
 
 `__Host-` prefix를 쓰려면 Domain attribute를 절대 넣지 않는다.
+HTTPS 운영 모드에서는 OIDC redirect chain 직후에도 cookie가 전송되도록 `SameSite=None; Secure`를 사용한다. 로컬 HTTP 모드에서는 fallback cookie인 `n8np_session`에 `SameSite=Lax`를 사용한다.
 
 ## Vault credential store
 

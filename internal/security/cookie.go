@@ -24,7 +24,7 @@ func ProxySessionCookie(sessionID string, secure bool, maxAge int) *http.Cookie 
 		MaxAge:   maxAge,
 		Secure:   secure,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSiteForSessionCookie(secure),
 	}
 }
 
@@ -38,7 +38,7 @@ func ProxySessionCookies(sessionID string, secure bool, maxAge int) []*http.Cook
 			MaxAge:   maxAge,
 			Secure:   true,
 			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
+			SameSite: sameSiteForSessionCookie(secure),
 		})
 	}
 	return cookies
@@ -52,7 +52,7 @@ func ClearProxySessionCookie(secure bool) *http.Cookie {
 		MaxAge:   -1,
 		Secure:   secure,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSiteForSessionCookie(secure),
 	}
 }
 
@@ -66,7 +66,7 @@ func ClearProxySessionCookies(secure bool) []*http.Cookie {
 			MaxAge:   -1,
 			Secure:   true,
 			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
+			SameSite: sameSiteForSessionCookie(secure),
 		})
 	}
 	cookies = append(cookies, ClearProxySessionCookie(false))
@@ -81,7 +81,7 @@ func N8NBridgeCookie(secure bool, maxAge int) *http.Cookie {
 		MaxAge:   maxAge,
 		Secure:   secure,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSiteForSessionCookie(secure),
 	}
 }
 
@@ -93,8 +93,15 @@ func ClearN8NBridgeCookie(secure bool) *http.Cookie {
 		MaxAge:   -1,
 		Secure:   secure,
 		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: sameSiteForSessionCookie(secure),
 	}
+}
+
+func sameSiteForSessionCookie(secure bool) http.SameSite {
+	if secure {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteLaxMode
 }
 
 func RewriteSetCookie(raw string, forceSecure bool) string {

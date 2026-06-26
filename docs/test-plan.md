@@ -225,7 +225,7 @@ Expected:
 
 Chrome devtools에서 확인한다.
 
-1. `__Host-n8np_session` cookie exists, Secure, HttpOnly, SameSite=Lax, Path=/, no Domain.
+1. `__Host-n8np_session` cookie exists, Secure, HttpOnly, SameSite=None, Path=/, no Domain. Local HTTP mode uses `n8np_session` with SameSite=Lax.
 2. n8n auth cookie exists on proxy host, not upstream host.
 3. `/rest/login` does not appear as browser-originated request during normal login except blocked attempts. Proxy server-side call은 browser network panel에 보이면 안 된다.
 4. Refresh after login keeps n8n editor session.
