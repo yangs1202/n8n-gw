@@ -182,6 +182,45 @@ func HasN8NBridgeCookie(r *http.Request) bool {
 	return err == nil && cookie.Value == "1"
 }
 
+func SanitizedUpstreamCookieHeader(raw string) string {
+	parts := strings.Split(raw, ";")
+	values := map[string]string{}
+	var order []string
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		idx := strings.Index(trimmed, "=")
+		if idx <= 0 {
+			continue
+		}
+		name := strings.TrimSpace(trimmed[:idx])
+		if isProxyCookieName(name) {
+			continue
+		}
+		if _, ok := values[name]; !ok {
+			order = append(order, name)
+		}
+		values[name] = strings.TrimSpace(trimmed[idx+1:])
+	}
+
+	out := make([]string, 0, len(order))
+	for _, name := range order {
+		out = append(out, name+"="+values[name])
+	}
+	return strings.Join(out, "; ")
+}
+
+func isProxyCookieName(name string) bool {
+	switch name {
+	case ProxySessionCookieName, InsecureProxySessionCookieName, N8NBridgeCookieName:
+		return true
+	default:
+		return false
+	}
+}
+
 func splitCookieParts(raw string) []string {
 	var parts []string
 	start := 0

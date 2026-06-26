@@ -47,6 +47,11 @@ func NewWithPublicBaseAndErrorCallback(upstream, publicBase *url.URL, timeout ti
 		req.Header.Set("X-Forwarded-Host", originalHost)
 		req.Header.Set("X-Forwarded-Proto", originalScheme)
 		appendXForwardedFor(req)
+		if cookie := security.SanitizedUpstreamCookieHeader(req.Header.Get("Cookie")); cookie != "" {
+			req.Header.Set("Cookie", cookie)
+		} else {
+			req.Header.Del("Cookie")
+		}
 	}
 
 	rp := &httputil.ReverseProxy{

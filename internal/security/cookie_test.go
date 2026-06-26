@@ -73,6 +73,15 @@ func TestN8NBridgeCookieUsesNoneSameSiteWhenSecure(t *testing.T) {
 	}
 }
 
+func TestSanitizedUpstreamCookieHeader(t *testing.T) {
+	raw := "__Host-n8np_session=proxy; n8n-auth=stale; n8np_session=proxy; other=1; n8np_n8n_bridge=1; n8n-auth=fresh"
+	got := SanitizedUpstreamCookieHeader(raw)
+	want := "n8n-auth=fresh; other=1"
+	if got != want {
+		t.Fatalf("SanitizedUpstreamCookieHeader() = %q, want %q", got, want)
+	}
+}
+
 func TestClearProxySessionCookiesClearsSecureFallbacks(t *testing.T) {
 	cookies := ClearProxySessionCookies(true)
 	names := map[string]int{}
