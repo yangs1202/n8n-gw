@@ -76,6 +76,11 @@ func NewWithPublicBaseAndErrorCallback(upstream, publicBase *url.URL, timeout ti
 }
 
 func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if isWebSocketUpgrade(r) {
+		p.handler.ServeHTTP(w, r)
+		return
+	}
+
 	ctx := r.Context()
 	if p.timeout > 0 {
 		var cancel context.CancelFunc
@@ -83,6 +88,19 @@ func (p *ReverseProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		defer cancel()
 	}
 	p.handler.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func isWebSocketUpgrade(r *http.Request) bool {
+	return strings.EqualFold(strings.TrimSpace(r.Header.Get("Upgrade")), "websocket") && hasHeaderToken(r.Header.Get("Connection"), "upgrade")
+}
+
+func hasHeaderToken(value, token string) bool {
+	for part := range strings.SplitSeq(value, ",") {
+		if strings.EqualFold(strings.TrimSpace(part), token) {
+			return true
+		}
+	}
+	return false
 }
 
 func forwardedProto(r *http.Request) string {
