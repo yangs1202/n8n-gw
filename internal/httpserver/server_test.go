@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -19,6 +20,21 @@ import (
 	"github.com/yangs1202/n8n-gw/internal/session"
 	"github.com/yangs1202/n8n-gw/internal/vault"
 )
+
+func TestHealthzReportsStatusForConsole(t *testing.T) {
+	server := newTestServer(t, testDeps{})
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+
+	var got map[string]any
+	if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if rec.Code != http.StatusOK || got["ok"] != true || got["status"] != "ok" {
+		t.Fatalf("unexpected health response: status=%d body=%v", rec.Code, got)
+	}
+}
 
 func TestPublicExecutionBypassesOIDC(t *testing.T) {
 	var reached bool

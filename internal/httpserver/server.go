@@ -152,7 +152,7 @@ func (s *Server) serveInternal(w http.ResponseWriter, r *http.Request) {
 	path := CleanPath(r.URL.Path)
 	switch {
 	case path == "/healthz" && r.Method == http.MethodGet:
-		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "status": "ok"})
 	case path == "/readyz" && r.Method == http.MethodGet:
 		s.handleReady(w, r)
 	case path == "/metrics" && r.Method == http.MethodGet:
