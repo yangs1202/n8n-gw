@@ -423,6 +423,23 @@ func TestAuthCallbackWithCredentialLogsIntoN8N(t *testing.T) {
 	if len(cookies) < 2 {
 		t.Fatalf("expected proxy and n8n cookies, got %#v", cookies)
 	}
+	var sessionID string
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == security.InsecureProxySessionCookieName {
+			sessionID = cookie.Value
+			break
+		}
+	}
+	if sessionID == "" {
+		t.Fatal("proxy session cookie missing")
+	}
+	savedSess, err := store.GetSession(context.Background(), sessionID)
+	if err != nil {
+		t.Fatalf("callback session is not readable: %v", err)
+	}
+	if !savedSess.Linked || savedSess.ExpiresAt.IsZero() || !savedSess.ExpiresAt.After(time.Now()) {
+		t.Fatalf("callback session was not persisted with a valid expiry: %#v", savedSess)
+	}
 }
 
 func TestAuthCallbackRejectsSignoutReturnTo(t *testing.T) {

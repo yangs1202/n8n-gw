@@ -273,8 +273,16 @@ func (s *Server) handleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.metrics.n8nLogin.WithLabelValues("success").Inc()
-	sess.Linked = true
-	_ = s.sessions.SaveSession(r.Context(), sessionID, sess)
+	savedSess, err := s.sessions.GetSession(r.Context(), sessionID)
+	if err != nil {
+		s.writeError(w, r, http.StatusServiceUnavailable, "session_store_unavailable")
+		return
+	}
+	savedSess.Linked = true
+	if err := s.sessions.SaveSession(r.Context(), sessionID, savedSess); err != nil {
+		s.writeError(w, r, http.StatusServiceUnavailable, "session_store_unavailable")
+		return
+	}
 	s.writeN8NCookies(w, result.Cookies)
 	http.SetCookie(w, security.N8NBridgeCookie(s.cfg.CookieSecure, int(s.cfg.SessionTTL.Seconds())))
 	http.Redirect(w, r, safeReturnTo(stored.ReturnTo), http.StatusFound)
